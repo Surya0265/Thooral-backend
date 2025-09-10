@@ -1,6 +1,9 @@
-export interface User {
+export interface UserResponse {
   id: string;
-  name: string;
+  fullName: string;
   email: string;
-  role: 'user' | 'admin';
+  schoolName: string;
+  isVerified: boolean;
+  createdAt: Date;
+  updatedAt?: Date;
 }

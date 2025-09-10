@@ -1,18 +1,11 @@
-import express, { Router, Request, Response } from 'express';
+import express from 'express';
+import authRoutes from './authRoutes';
 import userRoutes from './userRoutes';
 
-const router: Router = express.Router();
+const router = express.Router();
 
-// Health check endpoint
-router.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'API is operational',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Mount routes
+// Mount the routes
+router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 
 export default router;

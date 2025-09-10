@@ -1,133 +1,218 @@
 import { Request, Response } from 'express';
-import { User } from '../types/user';
-
-// Mock database
-let users: User[] = [
-  { id: '1', name: 'John Doe', email: 'john@example.com', role: 'user' },
-  { id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'admin' }
-];
+import prisma from '../lib/prisma';
 
 /**
  * Get all users
+ * @route GET /api/users
  */
-export const getUsers = (req: Request, res: Response): void => {
-  res.status(200).json({
-    status: 'success',
-    results: users.length,
-    data: {
-      users
-    }
-  });
+export const getUsers = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        schoolName: true,
+        isVerified: true,
+        createdAt: true,
+      }
+    });
+    
+    res.status(200).json({
+      status: 'success',
+      results: users.length,
+      data: { users }
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'An error occurred while fetching users'
+    });
+  }
 };
 
 /**
  * Get user by ID
+ * @route GET /api/users/:id
  */
-export const getUserById = (req: Request, res: Response): void => {
-  const { id } = req.params;
-  const user = users.find(u => u.id === id);
-
-  if (!user) {
-    res.status(404).json({
-      status: 'error',
-      message: `User with ID ${id} not found`
+export const getUserById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        schoolName: true,
+        isVerified: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
-    return;
-  }
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      user
+    
+    if (!user) {
+      res.status(404).json({
+        status: 'error',
+        message: `User with ID ${id} not found`
+      });
+      return;
     }
-  });
+    
+    res.status(200).json({
+      status: 'success',
+      data: { user }
+    });
+  } catch (error) {
+    console.error('Get user by ID error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'An error occurred while fetching the user'
+    });
+  }
 };
 
 /**
- * Create a new user
+ * Get current user profile
+ * @route GET /api/users/me
  */
-export const createUser = (req: Request, res: Response): void => {
-  const { name, email, role } = req.body;
-
-  // Validate input
-  if (!name || !email) {
-    res.status(400).json({
-      status: 'error',
-      message: 'Name and email are required'
-    });
-    return;
-  }
-
-  // Create new user
-  const newUser: User = {
-    id: (users.length + 1).toString(),
-    name,
-    email,
-    role: role || 'user'
-  };
-
-  users.push(newUser);
-
-  res.status(201).json({
-    status: 'success',
-    data: {
-      user: newUser
+export const getCurrentUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        status: 'error',
+        message: 'Not authenticated'
+      });
+      return;
     }
-  });
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        schoolName: true,
+        isVerified: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({
+        status: 'error',
+        message: 'User not found'
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: { user }
+    });
+  } catch (error) {
+    console.error('Get current user error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'An error occurred while fetching user profile'
+    });
+  }
 };
 
 /**
- * Update a user
+ * Update current user
+ * @route PUT /api/users/me
  */
-export const updateUser = (req: Request, res: Response): void => {
-  const { id } = req.params;
-  const { name, email, role } = req.body;
-
-  const userIndex = users.findIndex(u => u.id === id);
-
-  if (userIndex === -1) {
-    res.status(404).json({
-      status: 'error',
-      message: `User with ID ${id} not found`
-    });
-    return;
-  }
-
-  // Update user
-  const updatedUser = {
-    ...users[userIndex],
-    name: name || users[userIndex].name,
-    email: email || users[userIndex].email,
-    role: role || users[userIndex].role
-  };
-
-  users[userIndex] = updatedUser;
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      user: updatedUser
+export const updateCurrentUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        status: 'error',
+        message: 'Not authenticated'
+      });
+      return;
     }
-  });
+    
+    const { fullName, schoolName } = req.body;
+    
+    // Validate input
+    if (!fullName && !schoolName) {
+      res.status(400).json({
+        status: 'error',
+        message: 'At least one field is required to update'
+      });
+      return;
+    }
+    
+    // Prepare update data
+    const updateData: { fullName?: string; schoolName?: string } = {};
+    if (fullName) updateData.fullName = fullName;
+    if (schoolName) updateData.schoolName = schoolName;
+    
+    // Update user
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.userId },
+      data: updateData,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        schoolName: true,
+        isVerified: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+    
+    res.status(200).json({
+      status: 'success',
+      message: 'User profile updated successfully',
+      data: { user: updatedUser }
+    });
+  } catch (error) {
+    console.error('Update current user error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'An error occurred while updating user profile'
+    });
+  }
 };
 
 /**
- * Delete a user
+ * Delete a user (admin only)
+ * @route DELETE /api/users/:id
  */
-export const deleteUser = (req: Request, res: Response): void => {
-  const { id } = req.params;
-  const userIndex = users.findIndex(u => u.id === id);
-
-  if (userIndex === -1) {
-    res.status(404).json({
-      status: 'error',
-      message: `User with ID ${id} not found`
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    // Check if user exists
+    const userExists = await prisma.user.findUnique({
+      where: { id }
     });
-    return;
+    
+    if (!userExists) {
+      res.status(404).json({
+        status: 'error',
+        message: `User with ID ${id} not found`
+      });
+      return;
+    }
+    
+    // Delete user
+    await prisma.user.delete({
+      where: { id }
+    });
+    
+    res.status(204).send();
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'An error occurred while deleting the user'
+    });
   }
-
-  // Delete user
-  users = users.filter(u => u.id !== id);
-
-  res.status(204).send();
 };

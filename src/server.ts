@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import apiRoutes from './routes';
+import prisma from './lib/prisma';
 
 // Load environment variables
 dotenv.config();
@@ -47,9 +48,32 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
+// Test database connection
+async function testDatabaseConnection() {
+  try {
+    // Try to connect to the database
+    await prisma.$connect();
+    console.log('Connected to PostgreSQL database successfully');
+
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to connect to the database:');
+    console.error(error);
+    return false;
+  }
+}
+
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Test database connection
+  const isConnected = await testDatabaseConnection();
+  if (!isConnected) {
+    console.error('⚠️  Warning: Server is running but database connection failed');
+    console.error('⚠️  Please check your database configuration in .env file');
+  }
 });
 
 export default app;
